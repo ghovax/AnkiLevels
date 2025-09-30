@@ -15,10 +15,31 @@ export default defineContentScript({
   main() {
     let wordsMap: Map<string, WordData> = new Map();
 
+    // Create status indicator
+    const statusDiv = document.createElement('div');
+    statusDiv.id = 'anki-levels-status';
+    statusDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 12px; z-index: 999999; display: none;';
+    document.documentElement.appendChild(statusDiv);
+
+    function showStatus(message: string) {
+      statusDiv.textContent = message;
+      statusDiv.style.display = 'block';
+    }
+
+    function hideStatus() {
+      statusDiv.style.display = 'none';
+    }
+
     // Request words from background script
+    const startTime = Date.now();
+    showStatus('Fetching words from Anki...');
+
     browser.runtime.sendMessage({ action: 'getWords' }).then((response) => {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       if (response && response.words) {
         wordsMap = new Map(response.words);
+        showStatus(`Loaded ${wordsMap.size} words (${elapsed}s)`);
+
         // Wait for DOM to be ready before highlighting
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', highlightWords);
@@ -26,7 +47,16 @@ export default defineContentScript({
           // DOM already loaded, highlight immediately with a small delay to ensure rendering
           setTimeout(highlightWords, 100);
         }
+
+        // Hide status after 2 seconds
+        setTimeout(hideStatus, 2000);
+      } else {
+        showStatus('Failed to load words');
+        setTimeout(hideStatus, 3000);
       }
+    }).catch((error) => {
+      showStatus(`Error: ${error.message}`);
+      setTimeout(hideStatus, 3000);
     });
 
     function highlightWords() {
@@ -109,7 +139,7 @@ export default defineContentScript({
             );
 
             if (!hasOverlap) {
-              finalMatches.push(match);
+                finalMatches.push(match);
             }
           }
 
