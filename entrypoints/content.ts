@@ -19,7 +19,13 @@ export default defineContentScript({
     browser.runtime.sendMessage({ action: 'getWords' }).then((response) => {
       if (response && response.words) {
         wordsMap = new Map(response.words);
-        highlightWords();
+        // Wait for DOM to be ready before highlighting
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', highlightWords);
+        } else {
+          // DOM already loaded, highlight immediately with a small delay to ensure rendering
+          setTimeout(highlightWords, 100);
+        }
       }
     });
 
@@ -125,11 +131,16 @@ export default defineContentScript({
             span.textContent = match.word;
             const color = getDifficultyColor(match.data.difficultyLevel);
             // Set styles individually to ensure they're applied
-            span.style.setProperty('display', 'inline', 'important');
             span.style.setProperty('background-color', `${color}33`, 'important');
-            span.style.setProperty('border-bottom', `2px solid ${color}`, 'important');
+            span.style.setProperty('text-decoration', `underline 2px solid ${color}`, 'important');
+            span.style.setProperty('text-underline-offset', '2px', 'important');
             span.style.setProperty('cursor', 'pointer', 'important');
             span.style.setProperty('transition', 'background-color 0.2s', 'important');
+            // Prevent font size inheritance issues
+            span.style.setProperty('font-size', 'inherit', 'important');
+            span.style.setProperty('font-family', 'inherit', 'important');
+            span.style.setProperty('font-weight', 'inherit', 'important');
+            span.style.setProperty('line-height', 'inherit', 'important');
             span.title = `${Math.round(match.data.difficultyLevel)}%`;
 
             fragment.appendChild(span);
