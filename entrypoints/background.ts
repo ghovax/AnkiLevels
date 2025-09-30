@@ -35,30 +35,53 @@ async function fetchJapaneseCards(): Promise<Map<string, { difficultyLevel: numb
     const cardIds = await callAnkiConnect('findCards', { query: 'deck:Japanese' });
 
     if (!cardIds || cardIds.length === 0) {
-      console.log('No cards found in Japanese deck');
       return new Map();
     }
 
     // Get detailed information about the cards
-    const cardsInfo: AnkiCard[] = await callAnkiConnect('cardsInfo', { cards: cardIds });
+    const cardsInfo: any[] = await callAnkiConnect('cardsInfo', { cards: cardIds });
 
     const wordMap = new Map<string, { difficultyLevel: number }>();
 
     cardsInfo.forEach((card) => {
-      const expression = card.fields.Expression?.value;
+      const expression = card.fields?.Expression?.value;
       if (!expression) return;
 
       // Calculate difficulty level (0-100) based on card stats
-      // Lower interval = harder (less known)
+      // Higher interval = easier (better known)
       // More lapses = harder
-      // Lower ease = harder
-      const intervalScore = Math.min(card.interval / 365, 1) * 40; // Max 40 points for 1 year interval
-      const easeScore = ((card.ease - 1300) / 1700) * 30; // Ease typically 1300-3000, max 30 points
-      const lapsesScore = Math.max(30 - (card.lapses * 5), 0); // Fewer lapses = higher score, max 30 points
+      const interval = card.interval || 0;
+      const lapses = card.lapses || 0;
+      const reps = card.reps || 0;
 
-      const difficultyLevel = Math.max(0, Math.min(100, intervalScore + easeScore + lapsesScore));
+      // Base score from interval (most important factor)
+      // 1 day = 10 points, 21 days (3 weeks) = 50 points, 90 days (3 months) = 75 points, 180+ days = 90+ points
+      let intervalScore = 0;
+      if (interval >= 180) {
+        intervalScore = 90 + Math.min((interval - 180) / 365, 1) * 10; // 90-100 for 6+ months
+      } else if (interval >= 90) {
+        intervalScore = 75 + ((interval - 90) / 90) * 15; // 75-90 for 3-6 months
+      } else if (interval >= 21) {
+        intervalScore = 50 + ((interval - 21) / 69) * 25; // 50-75 for 3 weeks to 3 months
+      } else if (interval >= 7) {
+        intervalScore = 30 + ((interval - 7) / 14) * 20; // 30-50 for 1-3 weeks
+      } else if (interval >= 1) {
+        intervalScore = 10 + ((interval - 1) / 6) * 20; // 10-30 for 1-7 days
+      } else {
+        intervalScore = 0; // New card
+      }
 
-      wordMap.set(expression, { difficultyLevel });
+      // Lapses penalty: small penalty for mistakes (not too harsh)
+      // 0 lapses = 0 penalty, 1-2 lapses = -5 to -10, 3+ lapses = -15+
+      const lapsesScore = -Math.min(lapses * 5, 25);
+
+      // Bonus for cards with any reviews (you've seen it at least)
+      const repsBonus = reps > 0 ? Math.min(reps * 2, 10) : 0;
+
+      let difficultyLevel = intervalScore + lapsesScore + repsBonus;
+      difficultyLevel = Math.max(0, Math.min(100, difficultyLevel));
+
+      wordMap.set(expression, { difficultyLevel: difficultyLevel });
     });
 
     return wordMap;
@@ -73,13 +96,10 @@ let lastFetchTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export default defineBackground(() => {
-  console.log('AnkiLevels background script started');
-
   // Fetch cards on startup
   fetchJapaneseCards().then((words) => {
     cachedWords = words;
     lastFetchTime = Date.now();
-    console.log(`Fetched ${words.size} words from Japanese deck`);
   });
 
   // Listen for requests from content script
