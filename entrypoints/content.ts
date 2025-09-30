@@ -124,13 +124,13 @@ export default defineContentScript({
             span.className = 'anki-highlight';
             span.textContent = match.word;
             const color = getDifficultyColor(match.data.difficultyLevel);
-            span.style.cssText = `
-              background-color: ${color}33 !important;
-              border-bottom: 2px solid ${color} !important;
-              cursor: pointer !important;
-              transition: background-color 0.2s !important;
-            `;
-            span.title = `Difficulty: ${Math.round(match.data.difficultyLevel)}/100`;
+            // Set styles individually to ensure they're applied
+            span.style.setProperty('display', 'inline', 'important');
+            span.style.setProperty('background-color', `${color}33`, 'important');
+            span.style.setProperty('border-bottom', `2px solid ${color}`, 'important');
+            span.style.setProperty('cursor', 'pointer', 'important');
+            span.style.setProperty('transition', 'background-color 0.2s', 'important');
+            span.title = `${Math.round(match.data.difficultyLevel)}%`;
 
             fragment.appendChild(span);
             lastIndex = match.index + match.length;
