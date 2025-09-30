@@ -131,6 +131,7 @@ export default defineContentScript({
             span.textContent = match.word;
             const color = getDifficultyColor(match.data.difficultyLevel);
             // Set styles individually to ensure they're applied
+            span.style.setProperty('display', 'inline', 'important');
             span.style.setProperty('background-color', `${color}33`, 'important');
             span.style.setProperty('text-decoration', `underline 2px solid ${color}`, 'important');
             span.style.setProperty('text-underline-offset', '2px', 'important');
