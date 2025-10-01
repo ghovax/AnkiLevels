@@ -183,10 +183,39 @@ export default defineContentScript({
             // Add text content
             span.textContent = match.word;
 
+            // Assign vertical levels to overlapping matches
+            // Non-overlapping matches should get the same level
+            const levels: number[] = [];
+            match.overlapping.forEach((m, idx) => {
+              let level = 0;
+              // Find the lowest level where this match doesn't overlap with any existing match at that level
+              while (true) {
+                let hasOverlap = false;
+                for (let i = 0; i < idx; i++) {
+                  if (levels[i] === level) {
+                    const other = match.overlapping[i];
+                    // Check if they overlap
+                    const mEnd = m.index + m.word.length;
+                    const otherEnd = other.index + other.word.length;
+                    if (!(mEnd <= other.index || m.index >= otherEnd)) {
+                      hasOverlap = true;
+                      break;
+                    }
+                  }
+                }
+                if (!hasOverlap) {
+                  levels[idx] = level;
+                  break;
+                }
+                level++;
+              }
+            });
+
             // Create stacked underlines as child elements, each matching their word's length
             match.overlapping.forEach((m, idx) => {
               const color = getDifficultyColor(m.data.difficultyLevel);
-              const offset = 0.1 + (idx * 0.15); // Stack underlines in em units
+              const level = levels[idx];
+              const offset = 0.1 + (level * 0.15); // Stack underlines in em units based on level
 
               // Calculate position and width based on where this match starts within the main match
               const relativeStart = m.index - match.index;
