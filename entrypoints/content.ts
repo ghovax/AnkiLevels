@@ -169,6 +169,8 @@ export default defineContentScript({
             span.style.setProperty('display', 'inline', 'important');
             span.style.setProperty('cursor', 'pointer', 'important');
             span.style.setProperty('transition', 'background-color 0.2s', 'important');
+            span.style.setProperty('margin', '0', 'important');
+            span.style.setProperty('padding', '0', 'important');
             span.style.setProperty('margin-right', '1px', 'important'); // Small gap between adjacent highlights
             // Prevent font size inheritance issues
             span.style.setProperty('font-size', 'inherit', 'important');
@@ -230,6 +232,7 @@ export default defineContentScript({
               const gapPercent = 2;
 
               const underline = document.createElement('span');
+              underline.style.setProperty('display', 'block', 'important');
               underline.style.setProperty('position', 'absolute', 'important');
               underline.style.setProperty('left', `${leftPercent}%`, 'important');
               underline.style.setProperty('width', `calc(${widthPercent}% - ${gapPercent}%)`, 'important');
@@ -237,6 +240,8 @@ export default defineContentScript({
               underline.style.setProperty('height', '1.5px', 'important');
               underline.style.setProperty('background-color', color, 'important');
               underline.style.setProperty('pointer-events', 'none', 'important');
+              underline.style.setProperty('margin', '0', 'important');
+              underline.style.setProperty('padding', '0', 'important');
 
               span.appendChild(underline);
             });
