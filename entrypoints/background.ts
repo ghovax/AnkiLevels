@@ -15,6 +15,105 @@ interface AnkiConnectResponse {
   error: string | null;
 }
 
+// IndexedDB helper class
+class AnkiDB {
+  private dbName = 'AnkiLevelsDB';
+  private storeName = 'words';
+  private version = 1;
+  private db: IDBDatabase | null = null;
+
+  async init(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.version);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
+
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains(this.storeName)) {
+          db.createObjectStore(this.storeName, { keyPath: 'word' });
+        }
+      };
+    });
+  }
+
+  async saveWords(words: Map<string, { difficultyLevel: number }>): Promise<void> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+
+      // Clear existing data
+      store.clear();
+
+      // Add all words
+      words.forEach((data, word) => {
+        store.put({ word, difficultyLevel: data.difficultyLevel });
+      });
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  async getWords(): Promise<Map<string, { difficultyLevel: number }> | null> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeName], 'readonly');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const results = request.result;
+        if (results.length === 0) {
+          resolve(null);
+        } else {
+          const wordMap = new Map<string, { difficultyLevel: number }>();
+          results.forEach((item: any) => {
+            wordMap.set(item.word, { difficultyLevel: item.difficultyLevel });
+          });
+          resolve(wordMap);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async saveMetadata(key: string, value: any): Promise<void> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      store.put({ word: `__metadata_${key}`, value });
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  async getMetadata(key: string): Promise<any> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeName], 'readonly');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.get(`__metadata_${key}`);
+
+      request.onsuccess = () => {
+        resolve(request.result?.value);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+}
+
 async function callAnkiConnect(action: string, params: any = {}): Promise<any> {
   const response = await fetch('http://localhost:8765', {
     method: 'POST',
@@ -42,12 +141,28 @@ async function fetchJapaneseCards(): Promise<Map<string, { difficultyLevel: numb
       return new Map();
     }
 
-    // Get detailed information about the cards
-    const cardsInfo: any[] = await callAnkiConnect('cardsInfo', { cards: cardIds });
+    // Batch card info requests to reduce latency
+    const BATCH_SIZE = 500;
+    const batches: number[][] = [];
+    for (let i = 0; i < cardIds.length; i += BATCH_SIZE) {
+      batches.push(cardIds.slice(i, i + BATCH_SIZE));
+    }
+
+    // Process batches in parallel (max 5 concurrent requests)
+    const MAX_CONCURRENT = 5;
+    const allCardsInfo: any[] = [];
+
+    for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
+      const batchGroup = batches.slice(i, i + MAX_CONCURRENT);
+      const results = await Promise.all(
+        batchGroup.map(batch => callAnkiConnect('cardsInfo', { cards: batch }))
+      );
+      results.forEach(result => allCardsInfo.push(...result));
+    }
 
     const wordMap = new Map<string, { difficultyLevel: number }>();
 
-    cardsInfo.forEach((card) => {
+    allCardsInfo.forEach((card) => {
       const expression = card.fields?.Expression?.value;
       if (!expression) return;
 
@@ -95,40 +210,89 @@ async function fetchJapaneseCards(): Promise<Map<string, { difficultyLevel: numb
   }
 }
 
+const db = new AnkiDB();
 let cachedWords: Map<string, { difficultyLevel: number }> | null = null;
-let lastFetchTime = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+let isSyncing = false;
+const SYNC_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+async function syncWithAnki() {
+  if (isSyncing) return;
+  isSyncing = true;
+
+  try {
+    console.log('Syncing with Anki...');
+    const words = await fetchJapaneseCards();
+    cachedWords = words;
+    await db.saveWords(words);
+    await db.saveMetadata('lastSync', Date.now());
+    console.log(`Synced ${words.size} words from Anki`);
+  } catch (error) {
+    console.error('Error syncing with Anki:', error);
+  } finally {
+    isSyncing = false;
+  }
+}
 
 export default defineBackground(() => {
-  // Fetch cards on startup
-  fetchJapaneseCards().then((words) => {
-    cachedWords = words;
-    lastFetchTime = Date.now();
+  // Initialize database and load cached words
+  db.init().then(async () => {
+    // Try to load from IndexedDB first (instant)
+    const savedWords = await db.getWords();
+    if (savedWords) {
+      cachedWords = savedWords;
+      console.log(`Loaded ${savedWords.size} words from IndexedDB`);
+    }
+
+    // Check if we need to sync
+    const lastSync = await db.getMetadata('lastSync');
+    const now = Date.now();
+
+    if (!lastSync || now - lastSync > SYNC_INTERVAL) {
+      // Sync in background
+      syncWithAnki();
+    }
+
+    // Set up periodic sync every hour
+    setInterval(() => {
+      syncWithAnki();
+    }, SYNC_INTERVAL);
   });
 
   // Listen for requests from content script
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.action === 'getWords') {
-      const now = Date.now();
-
-      // Refresh cache if expired
-      if (!cachedWords || now - lastFetchTime > CACHE_DURATION) {
-        fetchJapaneseCards().then((words) => {
-          cachedWords = words;
-          lastFetchTime = now;
-          sendResponse({ words: Array.from(words.entries()) });
+      // Return cached words immediately if available
+      if (cachedWords) {
+        sendResponse({ words: Array.from(cachedWords.entries()) });
+      } else {
+        // If no cache, wait for DB to load
+        db.getWords().then((words) => {
+          if (words) {
+            cachedWords = words;
+            sendResponse({ words: Array.from(words.entries()) });
+          } else {
+            // No data yet, trigger sync
+            syncWithAnki().then(() => {
+              if (cachedWords) {
+                sendResponse({ words: Array.from(cachedWords.entries()) });
+              } else {
+                sendResponse({ words: [] });
+              }
+            });
+          }
         });
         return true; // Keep channel open for async response
-      } else {
-        sendResponse({ words: Array.from(cachedWords.entries()) });
       }
     }
 
     if (message.action === 'refreshWords') {
-      fetchJapaneseCards().then((words) => {
-        cachedWords = words;
-        lastFetchTime = Date.now();
-        sendResponse({ words: Array.from(words.entries()), count: words.size });
+      // Force sync with Anki
+      syncWithAnki().then(() => {
+        if (cachedWords) {
+          sendResponse({ words: Array.from(cachedWords.entries()), count: cachedWords.size });
+        } else {
+          sendResponse({ words: [], count: 0 });
+        }
       });
       return true; // Keep channel open for async response
     }

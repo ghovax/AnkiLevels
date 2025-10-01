@@ -6,6 +6,9 @@ const statusDiv = document.getElementById('status') as HTMLDivElement;
 browser.storage.local.get('deckName').then((result) => {
   if (result.deckName) {
     deckNameInput.value = result.deckName;
+  } else {
+    // Set default deck name
+    deckNameInput.value = 'Japanese';
   }
 });
 

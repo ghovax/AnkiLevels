@@ -14,6 +14,7 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
     let wordsMap: Map<string, WordData> = new Map();
+    let isHighlighting = false;
 
     // Create status indicator
     const statusDiv = document.createElement('div');
@@ -32,7 +33,7 @@ export default defineContentScript({
 
     // Request words from background script
     const startTime = Date.now();
-    showStatus('Fetching words from Anki...');
+    showStatus('Loading words...');
 
     browser.runtime.sendMessage({ action: 'getWords' }).then((response) => {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -42,10 +43,10 @@ export default defineContentScript({
 
         // Wait for DOM to be ready before highlighting
         if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', highlightWords);
+          document.addEventListener('DOMContentLoaded', () => highlightWords(false));
         } else {
-          // DOM already loaded, highlight immediately with a small delay to ensure rendering
-          setTimeout(highlightWords, 100);
+          // DOM already loaded, schedule highlighting with idle callback
+          requestIdleCallback(() => highlightWords(false), { timeout: 500 });
         }
 
         // Hide status after 2 seconds
@@ -59,8 +60,9 @@ export default defineContentScript({
       setTimeout(hideStatus, 3000);
     });
 
-    function highlightWords() {
-      if (wordsMap.size === 0) return;
+    function highlightWords(skipCheck: boolean = true) {
+      if (isHighlighting || wordsMap.size === 0) return;
+      if (!skipCheck) isHighlighting = true;
 
       // Sort words by length (longest first) for better matching
       const sortedWords = Array.from(wordsMap.entries()).sort((a, b) => b[0].length - a[0].length);
@@ -91,22 +93,30 @@ export default defineContentScript({
         textNodes.push(node as Text);
       }
 
-      // Process in batches to avoid blocking
+      // Process in smaller batches with idle callbacks to avoid blocking
       let processed = 0;
-      const batchSize = 100;
+      const batchSize = 50;
 
       function processBatch() {
         const end = Math.min(processed + batchSize, textNodes.length);
+        const deadline = performance.now() + 8; // Max 8ms per batch
 
         for (let i = processed; i < end; i++) {
+          // Check if we're running out of time
+          if (performance.now() >= deadline) {
+            break;
+          }
+
           const textNode = textNodes[i];
           const text = textNode.textContent || '';
           if (!text.trim()) continue;
 
           const matches: { index: number; length: number; data: WordData; word: string }[] = [];
 
-          // Only search for words, much more efficient than forEach on all 17k words
+          // Only search for words that could potentially match
           for (const [word, data] of sortedWords) {
+            // Quick check: if word isn't in text, skip
+            if (!text.includes(word)) continue;
             let index = text.indexOf(word);
             while (index !== -1) {
               // Check if this position is already covered by a longer match
@@ -189,12 +199,22 @@ export default defineContentScript({
         processed = end;
 
         if (processed < textNodes.length) {
-          requestAnimationFrame(processBatch);
+          // Use requestIdleCallback for better performance
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(processBatch, { timeout: 1000 });
+          } else {
+            requestAnimationFrame(processBatch);
+          }
+        } else {
+          isHighlighting = false;
         }
       }
 
       processBatch();
     }
+
+    // Debounce helper
+    let mutationTimeout: number | null = null;
 
     // Re-highlight when DOM changes (for dynamic content)
     const observer = new MutationObserver((mutations) => {
@@ -207,8 +227,15 @@ export default defineContentScript({
         });
       });
 
-      if (shouldHighlight) {
-        setTimeout(highlightWords, 100);
+      if (shouldHighlight && !isHighlighting) {
+        // Debounce to avoid excessive re-highlighting
+        if (mutationTimeout !== null) {
+          clearTimeout(mutationTimeout);
+        }
+        mutationTimeout = setTimeout(() => {
+          highlightWords(true);
+          mutationTimeout = null;
+        }, 300) as unknown as number;
       }
     });
 
