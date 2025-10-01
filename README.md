@@ -1,6 +1,6 @@
 # Anki Levels
 
-<img src="assets/128.png" alt="Anki Levels Icon" width="64" height="64">
+<img src="assets/128.png" alt="Anki Levels Icon" width="96" height="96">
 
 A Chrome extension that highlights words on web pages based on your Anki card difficulty levels, helping you visualize which words you know well and which need more practice.
 
