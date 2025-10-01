@@ -222,14 +222,17 @@ export default defineContentScript({
               const matchLength = m.word.length;
               const totalLength = match.word.length;
 
-              // Calculate percentage positions
+              // Calculate percentage positions with a small gap
               const leftPercent = (relativeStart / totalLength) * 100;
               const widthPercent = (matchLength / totalLength) * 100;
+
+              // Add small gap (2% of total width) between adjacent underlines
+              const gapPercent = 2;
 
               const underline = document.createElement('span');
               underline.style.setProperty('position', 'absolute', 'important');
               underline.style.setProperty('left', `${leftPercent}%`, 'important');
-              underline.style.setProperty('width', `${widthPercent}%`, 'important');
+              underline.style.setProperty('width', `calc(${widthPercent}% - ${gapPercent}%)`, 'important');
               underline.style.setProperty('bottom', `-${offset}em`, 'important');
               underline.style.setProperty('height', '1.5px', 'important');
               underline.style.setProperty('background-color', color, 'important');
