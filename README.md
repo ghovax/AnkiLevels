@@ -1,18 +1,18 @@
-<img src="assets/128.png" alt="Anki Levels Icon" width="128" height="128">
-
 # Anki Levels
+
+<img src="assets/128.png" alt="Anki Levels Icon" width="64" height="64">
 
 A Chrome extension that highlights words on web pages based on your Anki card difficulty levels, helping you visualize which words you know well and which need more practice.
 
 ## Screenshots
 
-![Highlighted words on a webpage](assets/Screenshot%202025-10-01%20at%2011.38.50.jpg)
+![Highlighted words on a webpage](assets/Screenshot%202025-10-01%20at%2011.43.18.jpg)
 _Words highlighted with color-coded difficulty levels and overlapping word detection_
 
-![Example highlighting](assets/Screenshot%202025-10-01%20at%2011.38.55.jpg)
+![Example highlighting](assets/Screenshot%202025-10-01%20at%2011.43.21.jpg)
 _Tooltip showing difficulty percentage on hover_
 
-![Additional example](assets/Screenshot%202025-10-01%20at%2011.38.58.jpg)
+![Additional example](assets/Screenshot%202025-10-01%20at%2011.43.24.jpg)
 _Multiple words highlighted across different difficulty levels_
 
 ## Features
