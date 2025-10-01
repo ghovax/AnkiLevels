@@ -217,7 +217,7 @@ export default defineContentScript({
             match.overlapping.forEach((m, idx) => {
               const color = getDifficultyColor(m.data.difficultyLevel);
               const level = levels[idx];
-              const offset = 0.1 + (level * 0.15); // Stack underlines in em units based on level
+              const offset = `calc(-1 * (1px + ${level * 2}px))`; // Stack with minimum 3px separation per level
 
               // Calculate position and width based on where this match starts within the main match
               const relativeStart = m.index - match.index;
@@ -236,7 +236,7 @@ export default defineContentScript({
               underline.style.setProperty('position', 'absolute', 'important');
               underline.style.setProperty('left', `${leftPercent}%`, 'important');
               underline.style.setProperty('width', `calc(${widthPercent}% - ${gapPercent}%)`, 'important');
-              underline.style.setProperty('bottom', `-${offset}em`, 'important');
+              underline.style.setProperty('bottom', `${offset}`, 'important');
               underline.style.setProperty('height', '1.5px', 'important');
               underline.style.setProperty('background-color', color, 'important');
               underline.style.setProperty('pointer-events', 'none', 'important');
