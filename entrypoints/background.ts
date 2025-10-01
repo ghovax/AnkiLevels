@@ -17,8 +17,8 @@ interface AnkiConnectResponse {
 
 // IndexedDB helper class
 class AnkiDB {
-  private dbName = 'AnkiLevelsDB';
-  private storeName = 'words';
+  private dbName = "AnkiLevelsDB";
+  private storeName = "words";
   private version = 1;
   private db: IDBDatabase | null = null;
 
@@ -35,17 +35,19 @@ class AnkiDB {
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains(this.storeName)) {
-          db.createObjectStore(this.storeName, { keyPath: 'word' });
+          db.createObjectStore(this.storeName, { keyPath: "word" });
         }
       };
     });
   }
 
-  async saveWords(words: Map<string, { difficultyLevel: number }>): Promise<void> {
+  async saveWords(
+    words: Map<string, { difficultyLevel: number }>,
+  ): Promise<void> {
     if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.storeName], 'readwrite');
+      const transaction = this.db!.transaction([this.storeName], "readwrite");
       const store = transaction.objectStore(this.storeName);
 
       // Clear existing data
@@ -65,7 +67,7 @@ class AnkiDB {
     if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.storeName], 'readonly');
+      const transaction = this.db!.transaction([this.storeName], "readonly");
       const store = transaction.objectStore(this.storeName);
       const request = store.getAll();
 
@@ -89,7 +91,7 @@ class AnkiDB {
     if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.storeName], 'readwrite');
+      const transaction = this.db!.transaction([this.storeName], "readwrite");
       const store = transaction.objectStore(this.storeName);
       store.put({ word: `__metadata_${key}`, value });
 
@@ -102,7 +104,7 @@ class AnkiDB {
     if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.storeName], 'readonly');
+      const transaction = this.db!.transaction([this.storeName], "readonly");
       const store = transaction.objectStore(this.storeName);
       const request = store.get(`__metadata_${key}`);
 
@@ -115,9 +117,9 @@ class AnkiDB {
 }
 
 async function callAnkiConnect(action: string, params: any = {}): Promise<any> {
-  const response = await fetch('http://localhost:8765', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const response = await fetch("http://localhost:8765", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, version: 6, params }),
   });
 
@@ -128,14 +130,18 @@ async function callAnkiConnect(action: string, params: any = {}): Promise<any> {
   return data.result;
 }
 
-async function fetchJapaneseCards(): Promise<Map<string, { difficultyLevel: number }>> {
+async function fetchJapaneseCards(): Promise<
+  Map<string, { difficultyLevel: number }>
+> {
   try {
     // Get deck name from storage
-    const storage = await browser.storage.local.get('deckName');
-    const deckName = storage.deckName || 'Japanese';
+    const storage = await browser.storage.local.get("deckName");
+    const deckName = storage.deckName || "Japanese";
 
     // Find all cards in the specified deck
-    const cardIds = await callAnkiConnect('findCards', { query: `deck:${deckName}` });
+    const cardIds = await callAnkiConnect("findCards", {
+      query: `deck:${deckName}`,
+    });
 
     if (!cardIds || cardIds.length === 0) {
       return new Map();
@@ -155,9 +161,11 @@ async function fetchJapaneseCards(): Promise<Map<string, { difficultyLevel: numb
     for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
       const batchGroup = batches.slice(i, i + MAX_CONCURRENT);
       const results = await Promise.all(
-        batchGroup.map(batch => callAnkiConnect('cardsInfo', { cards: batch }))
+        batchGroup.map((batch) =>
+          callAnkiConnect("cardsInfo", { cards: batch }),
+        ),
       );
-      results.forEach(result => allCardsInfo.push(...result));
+      results.forEach((result) => allCardsInfo.push(...result));
     }
 
     const wordMap = new Map<string, { difficultyLevel: number }>();
@@ -205,7 +213,7 @@ async function fetchJapaneseCards(): Promise<Map<string, { difficultyLevel: numb
 
     return wordMap;
   } catch (error) {
-    console.error('Error fetching Anki cards:', error);
+    console.error("Error fetching Anki cards:", error);
     return new Map();
   }
 }
@@ -213,21 +221,21 @@ async function fetchJapaneseCards(): Promise<Map<string, { difficultyLevel: numb
 const db = new AnkiDB();
 let cachedWords: Map<string, { difficultyLevel: number }> | null = null;
 let isSyncing = false;
-const SYNC_INTERVAL = 60 * 60 * 1000; // 1 hour
+const SYNC_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 
 async function syncWithAnki() {
   if (isSyncing) return;
   isSyncing = true;
 
   try {
-    console.log('Syncing with Anki...');
+    console.log("Syncing with Anki...");
     const words = await fetchJapaneseCards();
     cachedWords = words;
     await db.saveWords(words);
-    await db.saveMetadata('lastSync', Date.now());
+    await db.saveMetadata("lastSync", Date.now());
     console.log(`Synced ${words.size} words from Anki`);
   } catch (error) {
-    console.error('Error syncing with Anki:', error);
+    console.error("Error syncing with Anki:", error);
   } finally {
     isSyncing = false;
   }
@@ -244,7 +252,7 @@ export default defineBackground(() => {
     }
 
     // Check if we need to sync
-    const lastSync = await db.getMetadata('lastSync');
+    const lastSync = await db.getMetadata("lastSync");
     const now = Date.now();
 
     if (!lastSync || now - lastSync > SYNC_INTERVAL) {
@@ -252,7 +260,7 @@ export default defineBackground(() => {
       syncWithAnki();
     }
 
-    // Set up periodic sync every hour
+    // Set up periodic sync every 24 hours
     setInterval(() => {
       syncWithAnki();
     }, SYNC_INTERVAL);
@@ -260,7 +268,7 @@ export default defineBackground(() => {
 
   // Listen for requests from content script
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message.action === 'getWords') {
+    if (message.action === "getWords") {
       // Return cached words immediately if available
       if (cachedWords) {
         sendResponse({ words: Array.from(cachedWords.entries()) });
@@ -285,11 +293,14 @@ export default defineBackground(() => {
       }
     }
 
-    if (message.action === 'refreshWords') {
+    if (message.action === "refreshWords") {
       // Force sync with Anki
       syncWithAnki().then(() => {
         if (cachedWords) {
-          sendResponse({ words: Array.from(cachedWords.entries()), count: cachedWords.size });
+          sendResponse({
+            words: Array.from(cachedWords.entries()),
+            count: cachedWords.size,
+          });
         } else {
           sendResponse({ words: [], count: 0 });
         }

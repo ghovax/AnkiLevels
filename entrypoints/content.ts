@@ -11,61 +11,69 @@ function getDifficultyColor(level: number): string {
 }
 
 export default defineContentScript({
-  matches: ['<all_urls>'],
+  matches: ["<all_urls>"],
   main() {
     let wordsMap: Map<string, WordData> = new Map();
     let isHighlighting = false;
 
     // Create status indicator
-    const statusDiv = document.createElement('div');
-    statusDiv.id = 'anki-levels-status';
-    statusDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 12px; z-index: 999999; display: none;';
+    const statusDiv = document.createElement("div");
+    statusDiv.id = "anki-levels-status";
+    statusDiv.style.cssText =
+      "position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 12px; z-index: 999999; display: none;";
     document.documentElement.appendChild(statusDiv);
 
     function showStatus(message: string) {
       statusDiv.textContent = message;
-      statusDiv.style.display = 'block';
+      statusDiv.style.display = "block";
     }
 
     function hideStatus() {
-      statusDiv.style.display = 'none';
+      statusDiv.style.display = "none";
     }
 
     // Request words from background script
     const startTime = Date.now();
-    showStatus('Loading words...');
+    showStatus("Loading words...");
 
-    browser.runtime.sendMessage({ action: 'getWords' }).then((response) => {
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      if (response && response.words) {
-        wordsMap = new Map(response.words);
-        showStatus(`Loaded ${wordsMap.size} words (${elapsed}s)`);
+    browser.runtime
+      .sendMessage({ action: "getWords" })
+      .then((response) => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        if (response && response.words) {
+          wordsMap = new Map(response.words);
+          showStatus(`Loaded ${wordsMap.size} words (${elapsed}s)`);
 
-        // Wait for DOM to be ready before highlighting
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', () => highlightWords(false));
+          // Wait for DOM to be ready before highlighting
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", () =>
+              highlightWords(false),
+            );
+          } else {
+            // DOM already loaded, schedule highlighting with idle callback
+            requestIdleCallback(() => highlightWords(false), { timeout: 500 });
+          }
+
+          // Hide status after 2 seconds
+          setTimeout(hideStatus, 2000);
         } else {
-          // DOM already loaded, schedule highlighting with idle callback
-          requestIdleCallback(() => highlightWords(false), { timeout: 500 });
+          showStatus("Failed to load words");
+          setTimeout(hideStatus, 3000);
         }
-
-        // Hide status after 2 seconds
-        setTimeout(hideStatus, 2000);
-      } else {
-        showStatus('Failed to load words');
+      })
+      .catch((error) => {
+        showStatus(`Error: ${error.message}`);
         setTimeout(hideStatus, 3000);
-      }
-    }).catch((error) => {
-      showStatus(`Error: ${error.message}`);
-      setTimeout(hideStatus, 3000);
-    });
+      });
 
     function highlightWords(skipCheck: boolean = true) {
       if (isHighlighting || wordsMap.size === 0) return;
       if (!skipCheck) isHighlighting = true;
 
       // Sort words by length (longest first) for better matching
-      const sortedWords = Array.from(wordsMap.entries()).sort((a, b) => b[0].length - a[0].length);
+      const sortedWords = Array.from(wordsMap.entries()).sort(
+        (a, b) => b[0].length - a[0].length,
+      );
 
       const walker = document.createTreeWalker(
         document.body,
@@ -76,15 +84,21 @@ export default defineContentScript({
             if (!parent) return NodeFilter.FILTER_REJECT;
             const tagName = parent.tagName;
             // Skip script, style, textarea, input, and already highlighted nodes
-            if (tagName === 'SCRIPT' || tagName === 'STYLE' || tagName === 'TEXTAREA' || tagName === 'INPUT' || tagName === 'NOSCRIPT') {
+            if (
+              tagName === "SCRIPT" ||
+              tagName === "STYLE" ||
+              tagName === "TEXTAREA" ||
+              tagName === "INPUT" ||
+              tagName === "NOSCRIPT"
+            ) {
               return NodeFilter.FILTER_REJECT;
             }
-            if (parent.classList.contains('anki-highlight')) {
+            if (parent.classList.contains("anki-highlight")) {
               return NodeFilter.FILTER_REJECT;
             }
             return NodeFilter.FILTER_ACCEPT;
           },
-        }
+        },
       );
 
       const textNodes: Text[] = [];
@@ -108,10 +122,15 @@ export default defineContentScript({
           }
 
           const textNode = textNodes[i];
-          const text = textNode.textContent || '';
+          const text = textNode.textContent || "";
           if (!text.trim()) continue;
 
-          const matches: { index: number; length: number; data: WordData; word: string }[] = [];
+          const matches: {
+            index: number;
+            length: number;
+            data: WordData;
+            word: string;
+          }[] = [];
 
           // Only search for words that could potentially match
           for (const [word, data] of sortedWords) {
@@ -133,12 +152,20 @@ export default defineContentScript({
           });
 
           // Group overlapping matches and keep longest for display
-          const finalMatches: Array<{ index: number; length: number; data: WordData; word: string; overlapping: typeof matches }> = [];
+          const finalMatches: Array<{
+            index: number;
+            length: number;
+            data: WordData;
+            word: string;
+            overlapping: typeof matches;
+          }> = [];
           for (const match of matches) {
             const existingGroup = finalMatches.find(
               (existing) =>
-                (match.index >= existing.index && match.index < existing.index + existing.length) ||
-                (match.index + match.length > existing.index && match.index < existing.index)
+                (match.index >= existing.index &&
+                  match.index < existing.index + existing.length) ||
+                (match.index + match.length > existing.index &&
+                  match.index < existing.index),
             );
 
             if (existingGroup) {
@@ -159,28 +186,40 @@ export default defineContentScript({
           for (const match of finalMatches) {
             // Add text before match
             if (match.index > lastIndex) {
-              fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+              fragment.appendChild(
+                document.createTextNode(text.substring(lastIndex, match.index)),
+              );
             }
 
             // Add highlighted span
-            const span = document.createElement('span');
-            span.className = 'anki-highlight';
-            span.style.setProperty('position', 'relative', 'important');
-            span.style.setProperty('display', 'inline', 'important');
-            span.style.setProperty('cursor', 'pointer', 'important');
-            span.style.setProperty('transition', 'background-color 0.2s', 'important');
-            span.style.setProperty('margin', '0', 'important');
-            span.style.setProperty('padding', '0', 'important');
-            span.style.setProperty('margin-right', '1px', 'important'); // Small gap between adjacent highlights
+            const span = document.createElement("span");
+            span.className = "anki-highlight";
+            span.style.setProperty("position", "relative", "important");
+            span.style.setProperty("display", "inline", "important");
+            span.style.setProperty("cursor", "pointer", "important");
+            span.style.setProperty(
+              "transition",
+              "background-color 0.2s",
+              "important",
+            );
+            span.style.setProperty("margin", "0", "important");
+            span.style.setProperty("padding", "0", "important");
+            span.style.setProperty("margin-right", "1px", "important"); // Small gap between adjacent highlights
             // Prevent font size inheritance issues
-            span.style.setProperty('font-size', 'inherit', 'important');
-            span.style.setProperty('font-family', 'inherit', 'important');
-            span.style.setProperty('font-weight', 'inherit', 'important');
-            span.style.setProperty('line-height', 'inherit', 'important');
+            span.style.setProperty("font-size", "inherit", "important");
+            span.style.setProperty("font-family", "inherit", "important");
+            span.style.setProperty("font-weight", "inherit", "important");
+            span.style.setProperty("line-height", "inherit", "important");
 
             // Use the primary match color for background
-            const primaryColor = getDifficultyColor(match.overlapping[0].data.difficultyLevel);
-            span.style.setProperty('background-color', `${primaryColor}33`, 'important');
+            const primaryColor = getDifficultyColor(
+              match.overlapping[0].data.difficultyLevel,
+            );
+            span.style.setProperty(
+              "background-color",
+              `${primaryColor}33`,
+              "important",
+            );
 
             // Add text content
             span.textContent = match.word;
@@ -231,26 +270,44 @@ export default defineContentScript({
               // Add small gap (2% of total width) between adjacent underlines
               const gapPercent = 2;
 
-              const underline = document.createElement('span');
-              underline.style.setProperty('display', 'block', 'important');
-              underline.style.setProperty('position', 'absolute', 'important');
-              underline.style.setProperty('left', `${leftPercent}%`, 'important');
-              underline.style.setProperty('width', `calc(${widthPercent}% - ${gapPercent}%)`, 'important');
-              underline.style.setProperty('bottom', `${offset}`, 'important');
-              underline.style.setProperty('height', '1.5px', 'important');
-              underline.style.setProperty('background-color', color, 'important');
-              underline.style.setProperty('pointer-events', 'none', 'important');
-              underline.style.setProperty('margin', '0', 'important');
-              underline.style.setProperty('padding', '0', 'important');
+              const underline = document.createElement("span");
+              underline.style.setProperty("display", "block", "important");
+              underline.style.setProperty("position", "absolute", "important");
+              underline.style.setProperty(
+                "left",
+                `${leftPercent}%`,
+                "important",
+              );
+              underline.style.setProperty(
+                "width",
+                `calc(${widthPercent}% - ${gapPercent}%)`,
+                "important",
+              );
+              underline.style.setProperty("bottom", `${offset}`, "important");
+              underline.style.setProperty("height", "1.5px", "important");
+              underline.style.setProperty(
+                "background-color",
+                color,
+                "important",
+              );
+              underline.style.setProperty(
+                "pointer-events",
+                "none",
+                "important",
+              );
+              underline.style.setProperty("margin", "0", "important");
+              underline.style.setProperty("padding", "0", "important");
 
               span.appendChild(underline);
             });
 
             // Build tooltip with all overlapping matches
             if (match.overlapping.length > 1) {
-              const tooltipLines = match.overlapping.map((m) =>
-                `${m.word} (${Math.round(m.data.difficultyLevel)}%)`
-              ).join('\n');
+              const tooltipLines = match.overlapping
+                .map(
+                  (m) => `${m.word} (${Math.round(m.data.difficultyLevel)}%)`,
+                )
+                .join("\n");
               span.title = `Multiple matches:\n${tooltipLines}`;
             } else {
               span.title = `${match.word} (${Math.round(match.data.difficultyLevel)}%)`;
@@ -262,7 +319,9 @@ export default defineContentScript({
 
           // Add remaining text
           if (lastIndex < text.length) {
-            fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+            fragment.appendChild(
+              document.createTextNode(text.substring(lastIndex)),
+            );
           }
 
           textNode.parentNode?.replaceChild(fragment, textNode);
@@ -272,7 +331,7 @@ export default defineContentScript({
 
         if (processed < textNodes.length) {
           // Use requestIdleCallback for better performance
-          if (typeof requestIdleCallback !== 'undefined') {
+          if (typeof requestIdleCallback !== "undefined") {
             requestIdleCallback(processBatch, { timeout: 1000 });
           } else {
             requestAnimationFrame(processBatch);
