@@ -2,6 +2,17 @@
 
 A Chrome extension that highlights words on web pages based on your Anki card difficulty levels, helping you visualize which words you know well and which need more practice.
 
+## Screenshots
+
+![Highlighted words on a webpage](assets/Screenshot%202025-10-01%20at%2011.22.19.png)
+*Words highlighted with color-coded difficulty levels and overlapping word detection*
+
+![Example highlighting](assets/Screenshot%202025-10-01%20at%2011.19.07.png)
+*Tooltip showing difficulty percentage on hover*
+
+![Additional example](assets/Screenshot%202025-10-01%20at%2011.19.44.png)
+*Multiple words highlighted across different difficulty levels*
+
 ## Features
 
 - **Smart Word Highlighting**: Automatically highlights words from your Anki deck as you browse the web

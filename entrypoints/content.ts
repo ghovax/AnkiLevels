@@ -196,7 +196,7 @@ export default defineContentScript({
             span.className = "anki-highlight";
             span.style.setProperty("position", "relative", "important");
             span.style.setProperty("display", "inline", "important");
-            span.style.setProperty("cursor", "pointer", "important");
+            // span.style.setProperty("cursor", "pointer", "important");
             span.style.setProperty(
               "transition",
               "background-color 0.2s",
