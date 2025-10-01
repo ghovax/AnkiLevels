@@ -166,10 +166,9 @@ export default defineContentScript({
             const span = document.createElement('span');
             span.className = 'anki-highlight';
             span.style.setProperty('position', 'relative', 'important');
-            span.style.setProperty('display', 'inline-block', 'important');
+            span.style.setProperty('display', 'inline', 'important');
             span.style.setProperty('cursor', 'pointer', 'important');
             span.style.setProperty('transition', 'background-color 0.2s', 'important');
-            span.style.setProperty('vertical-align', 'baseline', 'important');
             span.style.setProperty('margin-right', '1px', 'important'); // Small gap between adjacent highlights
             // Prevent font size inheritance issues
             span.style.setProperty('font-size', 'inherit', 'important');
@@ -187,7 +186,7 @@ export default defineContentScript({
             // Create stacked underlines as child elements, each matching their word's length
             match.overlapping.forEach((m, idx) => {
               const color = getDifficultyColor(m.data.difficultyLevel);
-              const offset = 1 + (idx * 2.5); // Stack underlines closer together
+              const offset = 0.1 + (idx * 0.15); // Stack underlines in em units
 
               // Calculate position and width based on where this match starts within the main match
               const relativeStart = m.index - match.index;
@@ -202,7 +201,7 @@ export default defineContentScript({
               underline.style.setProperty('position', 'absolute', 'important');
               underline.style.setProperty('left', `${leftPercent}%`, 'important');
               underline.style.setProperty('width', `${widthPercent}%`, 'important');
-              underline.style.setProperty('bottom', `-${offset}px`, 'important');
+              underline.style.setProperty('bottom', `-${offset}em`, 'important');
               underline.style.setProperty('height', '1.5px', 'important');
               underline.style.setProperty('background-color', color, 'important');
               underline.style.setProperty('pointer-events', 'none', 'important');
