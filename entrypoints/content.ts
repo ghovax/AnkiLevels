@@ -119,37 +119,34 @@ export default defineContentScript({
             if (!text.includes(word)) continue;
             let index = text.indexOf(word);
             while (index !== -1) {
-              // Check if this position is already covered by a longer match
-              const isCovered = matches.some(
-                (m) => index >= m.index && index < m.index + m.length
-              );
-
-              if (!isCovered) {
-                matches.push({ index, length: word.length, data, word });
-              }
-
+              matches.push({ index, length: word.length, data, word });
               index = text.indexOf(word, index + 1);
             }
           }
 
           if (matches.length === 0) continue;
 
-          // Sort by position and remove overlaps (keep longest/first match)
+          // Sort by position (longest first at same position)
           matches.sort((a, b) => {
             if (a.index !== b.index) return a.index - b.index;
-            return b.length - a.length; // Prefer longer matches at same position
+            return b.length - a.length;
           });
 
-          const finalMatches: typeof matches = [];
+          // Group overlapping matches and keep longest for display
+          const finalMatches: Array<{ index: number; length: number; data: WordData; word: string; overlapping: typeof matches }> = [];
           for (const match of matches) {
-            const hasOverlap = finalMatches.some(
+            const existingGroup = finalMatches.find(
               (existing) =>
                 (match.index >= existing.index && match.index < existing.index + existing.length) ||
                 (match.index + match.length > existing.index && match.index < existing.index)
             );
 
-            if (!hasOverlap) {
-                finalMatches.push(match);
+            if (existingGroup) {
+              // Add to overlapping group
+              existingGroup.overlapping.push(match);
+            } else {
+              // Create new group
+              finalMatches.push({ ...match, overlapping: [match] });
             }
           }
 
@@ -168,21 +165,60 @@ export default defineContentScript({
             // Add highlighted span
             const span = document.createElement('span');
             span.className = 'anki-highlight';
-            span.textContent = match.word;
-            const color = getDifficultyColor(match.data.difficultyLevel);
-            // Set styles individually to ensure they're applied
-            span.style.setProperty('display', 'inline', 'important');
-            span.style.setProperty('background-color', `${color}33`, 'important');
-            span.style.setProperty('text-decoration', `underline 2px solid ${color}`, 'important');
-            span.style.setProperty('text-underline-offset', '2px', 'important');
+            span.style.setProperty('position', 'relative', 'important');
+            span.style.setProperty('display', 'inline-block', 'important');
             span.style.setProperty('cursor', 'pointer', 'important');
             span.style.setProperty('transition', 'background-color 0.2s', 'important');
+            span.style.setProperty('vertical-align', 'baseline', 'important');
+            span.style.setProperty('margin-right', '1px', 'important'); // Small gap between adjacent highlights
             // Prevent font size inheritance issues
             span.style.setProperty('font-size', 'inherit', 'important');
             span.style.setProperty('font-family', 'inherit', 'important');
             span.style.setProperty('font-weight', 'inherit', 'important');
             span.style.setProperty('line-height', 'inherit', 'important');
-            span.title = `${Math.round(match.data.difficultyLevel)}%`;
+
+            // Use the primary match color for background
+            const primaryColor = getDifficultyColor(match.overlapping[0].data.difficultyLevel);
+            span.style.setProperty('background-color', `${primaryColor}33`, 'important');
+
+            // Add text content
+            span.textContent = match.word;
+
+            // Create stacked underlines as child elements, each matching their word's length
+            match.overlapping.forEach((m, idx) => {
+              const color = getDifficultyColor(m.data.difficultyLevel);
+              const offset = 1 + (idx * 2.5); // Stack underlines closer together
+
+              // Calculate position and width based on where this match starts within the main match
+              const relativeStart = m.index - match.index;
+              const matchLength = m.word.length;
+              const totalLength = match.word.length;
+
+              // Calculate percentage positions
+              const leftPercent = (relativeStart / totalLength) * 100;
+              const widthPercent = (matchLength / totalLength) * 100;
+
+              const underline = document.createElement('span');
+              underline.style.setProperty('position', 'absolute', 'important');
+              underline.style.setProperty('left', `${leftPercent}%`, 'important');
+              underline.style.setProperty('width', `${widthPercent}%`, 'important');
+              underline.style.setProperty('bottom', `-${offset}px`, 'important');
+              underline.style.setProperty('height', '1.5px', 'important');
+              underline.style.setProperty('background-color', color, 'important');
+              underline.style.setProperty('pointer-events', 'none', 'important');
+
+              span.appendChild(underline);
+            });
+
+            // Build tooltip with all overlapping matches
+            if (match.overlapping.length > 1) {
+              const tooltipLines = match.overlapping.map((m) =>
+                `${m.word} (${Math.round(m.data.difficultyLevel)}%)`
+              ).join('\n');
+              span.title = `Multiple matches:\n${tooltipLines}`;
+            } else {
+              span.title = `${match.word} (${Math.round(match.data.difficultyLevel)}%)`;
+            }
 
             fragment.appendChild(span);
             lastIndex = match.index + match.length;
