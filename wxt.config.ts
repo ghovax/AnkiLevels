@@ -6,6 +6,6 @@ export default defineConfig({
     name: "Anki Levels",
     description:
       "Highlight words on web pages based on your Anki card difficulty levels",
-    permissions: ["storage"],
+    permissions: ["storage", "tabs"],
   },
 });

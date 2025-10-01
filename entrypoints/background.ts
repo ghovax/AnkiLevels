@@ -136,11 +136,16 @@ async function fetchJapaneseCards(): Promise<
   try {
     // Get deck name from storage
     const storage = await browser.storage.local.get("deckName");
-    const deckName = storage.deckName || "Japanese";
+    const deckName = storage.deckName;
+
+    if (!deckName) {
+      return new Map();
+    }
 
     // Find all cards in the specified deck
+    // Quote deck name to handle spaces properly
     const cardIds = await callAnkiConnect("findCards", {
-      query: `deck:${deckName}`,
+      query: `deck:"${deckName}"`,
     });
 
     if (!cardIds || cardIds.length === 0) {

@@ -8,7 +8,7 @@ browser.storage.local.get("deckName").then((result) => {
     deckNameInput.value = result.deckName;
   } else {
     // Set default deck name
-    deckNameInput.value = "Japanese";
+    deckNameInput.value = "";
   }
 });
 
@@ -31,9 +31,18 @@ saveBtn.addEventListener("click", async () => {
   try {
     // Save to storage
     await browser.storage.local.set({ deckName });
-    showStatus("Settings saved!");
+    showStatus("Settings saved! Reloading page...");
     // Tell background script to refresh
     await browser.runtime.sendMessage({ action: "refreshWords" });
+
+    // Reload the current active tab
+    const [tab] = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tab?.id) {
+      await browser.tabs.reload(tab.id);
+    }
   } catch (error) {
     console.error("Error saving:", error);
     showStatus("Error saving settings", true);
